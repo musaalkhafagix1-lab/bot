@@ -1,0 +1,2 @@
+[build]
+nixpacks-config = "nshof/railpack.toml"
