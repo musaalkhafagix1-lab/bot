@@ -7,33 +7,28 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8650075665:AAGUTkGhIJUfkgpOU16Zy21DqTgX7LZkzc0")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "1269988382"))
+ADMIN_ID = 1269988382
 
 DATA_FILE = "files.json"
 lock = threading.Lock()
 
-# ---------------- SAFE LOAD ----------------
+#   تحميل البيانات
 def load_data():
     if not os.path.exists(DATA_FILE):
-        return create_empty_db()
+        return {
+            "computer programming": [],
+            "mathematics": [],
+            "arabic": [],
+            "english": [],
+            "electrical circuit analysis": [],
+            "cyber security fundamentals": [],
+            "network fundamentals": []
+        }
 
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return create_empty_db()
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def create_empty_db():
-    return {
-        "computer programming": [],
-        "mathematics": [],
-        "arabic": [],
-        "english": [],
-        "electrical circuit analysis": [],
-        "cyber security fundamentals": [],
-        "network fundamentals": []
-    }
-
+#   حفظ البيانات
 def save_data(data):
     with lock:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -42,7 +37,7 @@ def save_data(data):
 files_db = load_data()
 user_state = {}
 
-# ---------------- START ----------------
+#   /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📘 computer programming", callback_data="computer programming")],
@@ -57,9 +52,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID:
         keyboard.append([InlineKeyboardButton("➕ رفع ملف", callback_data="upload")])
 
-    await update.message.reply_text("اختر المادة 📚:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text(
+        "اختر المادة 📚:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
-# ---------------- BUTTONS ----------------
+#   الأزرار
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -68,7 +66,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "upload":
         user_state[query.from_user.id] = "awaiting_subject"
-        await query.message.reply_text("اكتب اسم المادة 📚")
+        await query.message.reply_text("اكتب اسم المادة الآن 📚")
         return
 
     subject_files = files_db.get(data, [])
@@ -78,13 +76,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     for f in subject_files:
+        caption = f"📄 {f['file_name']}"
         await context.bot.send_document(
             chat_id=query.message.chat_id,
             document=f["file_id"],
-            caption=f"📄 {f['file_name']}"
+            caption=caption
         )
 
-# ---------------- TEXT ----------------
+#   اختيار المادة
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -99,9 +98,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         user_state[user_id] = subject
-        await update.message.reply_text(f"ارسل الملف لمادة {subject}")
+        await update.message.reply_text(f"ارسل الملف الآن لمادة {subject}")
 
-# ---------------- FILE ----------------
+#   رفع الملفات
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -119,21 +118,23 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_data = {
         "file_id": file.file_id,
         "file_name": file.file_name,
+        "uploader": update.message.from_user.first_name,
+        "user_id": user_id,
         "date": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
 
     files_db[subject].append(file_data)
     save_data(files_db)
 
-    await update.message.reply_text("تم الحفظ ✅")
+    await update.message.reply_text("تم الحفظ بشكل مرتب ودائم ✅")
 
-# ---------------- REMOVE ----------------
+#   حذف ملف
 async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
     if len(context.args) != 2:
-        await update.message.reply_text("/remove <subject> <index>")
+        await update.message.reply_text("استخدام: /remove <المادة> <الفهرس>")
         return
 
     subject = context.args[0]
@@ -141,15 +142,17 @@ async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         index = int(context.args[1])
     except:
-        await update.message.reply_text("خطأ index")
+        await update.message.reply_text("الفهرس خطأ")
         return
 
     if subject in files_db and 0 <= index < len(files_db[subject]):
         del files_db[subject][index]
         save_data(files_db)
         await update.message.reply_text("تم الحذف ✅")
+    else:
+        await update.message.reply_text("غير موجود")
 
-# ---------------- RUN ----------------
+#   تشغيل البوت
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
@@ -158,5 +161,5 @@ app.add_handler(CallbackQueryHandler(button))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
 
-print("Bot running...")
+print("Bot is running... ")
 app.run_polling()
